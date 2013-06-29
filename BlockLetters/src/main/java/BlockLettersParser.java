@@ -1,21 +1,21 @@
-
 import java.io.File;
+import java.io.FileOutputStream;
+
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
 
-import dk.dren.hunspell.Hunspell;
-import dk.dren.hunspell.HunspellLibrary;
-import dk.dren.hunspell.HunspellMain;
+import org.apache.commons.io.IOUtils;
 
+import dk.dren.hunspell.Hunspell;
 
 public class BlockLettersParser {
 	public enum BlockType{
-		UP('b',ups),
-		DOWN('g',downs),
-		SMALL('a',smalls),
-		SPACE(' ',spaces);
+		UP('b',new char[]{'b','d','f','h','k','l','t'}),
+		DOWN('g',new char[]{'g','j','p','q','y'}),
+		SMALL('a',new char[]{'a','c','e','i','m','n','o','r','s','u','v','w','x','z'}),
+		SPACE(' ',new char[]{' '});
+		
 		private char[] values;
 		private char encodedValue;
 		private BlockType(char encodedValue,char[] values){
@@ -31,21 +31,20 @@ public class BlockLettersParser {
 		}
 	}
 
-	private static final char[] ups=new char[]{'b','d','f','h','k','l','t'};
-	private static final char[] downs=new char[]{'g','j','p','q','y'};
-	private static final char[] smalls=new char[]{'a','c','e','i','m','n','o','r','s','u','v','w','x','z'};
-	private static final char[] spaces=new char[]{' '};
-
 	private static Hunspell.Dictionary dictionary;
 
 //		public static final String encodedInput="bbba ba a baab";// this is a test
 //	public static final String encodedInput="gaaa abbb bba abab";//gone with the wind
 //	public static final String encodedInput="aba aaaba bbaa";//who wrote this
-//	public static final String encodedInput="bbaabba";//69928 (5)
-	public static String encodedInput="bab";//66 (30)
+	public static String encodedInput="bab";//66 (117)
 //	public static final String encodedInput="baagaaaa";
+private static int MAX_WORD_LENGTH=5;
 	
-	public static void main(String[] args) {
+//4 letter=       2s
+//5 letter=      44s
+//6 letter= 1165427s
+
+	public static void main(String[] args) throws Exception {
 		try{
 			dictionary=Hunspell.getInstance().getDictionary("lib/hunspell-en_US-7.1-0/en_US");
 		}catch(Exception ex){
@@ -53,12 +52,55 @@ public class BlockLettersParser {
 			return;
 		}
 		
-		encodedInput="bab";//66 (30)
-		encodedInput="baabbaa";//91 (52066)
-		encodedInput="baabbaab";//40 (378587) fuckhead!!!
+//		String encodedInput="bab";//66 (117)
+//		encodedInput="baabbaa";//91 (51477) 
+//		encodedInput="baabbaab";//40 (378587) fuckhead!!!
 		
-		long start=Calendar.getInstance().getTimeInMillis();
+		List<char[]> encodedChars=new ArrayList<char[]>();
+		for(int i=1;i<=MAX_WORD_LENGTH;i++){
+			System.err.println("word length="+i+" ...");
+			
+			encodedChars.add(new char[]{'b','a','g'});
+			int totalWords=0;
+			long start=Calendar.getInstance().getTimeInMillis();
+			CharIncrementer incrementer=new CharIncrementer(encodedChars);
+			boolean canIncrement=true;
+			String encodedString;
+			List<String> possibleWords;
+			while(canIncrement){
+				encodedString=incrementer.getCurrentString();
+				long wordStartTime=Calendar.getInstance().getTimeInMillis();
+				possibleWords=parseEncodedWord(encodedString);
+				totalWords+=possibleWords.size();
+				if(possibleWords.size()>0){
+					File f=null;
+						
+					 f=new File("output/"+i+"/"+encodedString+".txt");
+					f.getParentFile().mkdirs();
+					FileOutputStream fos=new FileOutputStream(f);
+					IOUtils.write(possibleWords.toString(), fos);
+					
+				}
+//				System.err.println("\t"+encodedString+" ("+(Calendar.getInstance().getTimeInMillis()-wordStartTime)+") :"+possibleWords);
+//				for(String s:possibleWords){
+//					System.err.println("\t"+s);
+//				}
+				canIncrement=incrementer.increment();
+			}
+			System.err.println("\ttotal time="+(Calendar.getInstance().getTimeInMillis()-start)+" words="+totalWords);
+
+		}
+
 		
+//		long start=Calendar.getInstance().getTimeInMillis();
+//		List<String> possibleWords=parseEncodedWord(encodedInput);
+//		for(String s:possibleWords){
+//			System.err.println(s);
+//		}
+//		System.err.println("time="+(Calendar.getInstance().getTimeInMillis()-start));
+	}
+	
+	private static List<String> computePossiblePhrases(String encodedPhrase){
 		String[] encodedWords=encodedInput.split(String.valueOf(BlockType.SPACE.encodedValue));
 
 		List<List<String>> possibleWords=new ArrayList<List<String>>();
@@ -70,13 +112,11 @@ public class BlockLettersParser {
 		createPossiblePhrases(possiblePhrases,possibleWords);
 
 		System.err.println("possiblePhrases["+possiblePhrases.size()+"]=");
-				for(String phrase:possiblePhrases){
-					System.err.println("\t"+phrase);
-				}
-				
-				System.err.println("time="+(Calendar.getInstance().getTimeInMillis()-start));
-//		System.err.println(dictionary.analyze("thin he a iced"));
-//		System.err.println(dictionary.analyze("this is a test"));
+		for(String phrase:possiblePhrases){
+			System.err.println("\t"+phrase);
+		}
+		
+		return possiblePhrases;
 	}
 
 	private static void createPossiblePhrases(List<String> possiblePhrases, List<List<String>> possibleWords) {
@@ -127,6 +167,10 @@ public class BlockLettersParser {
 		//do some smart filtering
 		if(encodingMatches(blockTypes,BlockType.SMALL)){
 			possibleWords.add("a");	
+		}else if(encodingMatches(blockTypes,BlockType.UP)){
+			return possibleWords;
+		}else if(encodingMatches(blockTypes,BlockType.DOWN)){
+			return possibleWords;
 		}else if(encodingMatches(blockTypes,BlockType.UP,BlockType.SMALL)){
 			possibleWords.add("be");
 			possibleWords.add("he");
@@ -134,37 +178,59 @@ public class BlockLettersParser {
 			possibleWords.add("do");
 			possibleWords.add("to");
 			possibleWords.add("is");	
+		}else if(encodingMatches(blockTypes,BlockType.UP,BlockType.UP,BlockType.SMALL)){
+			possibleWords.add("the");
+			possibleWords.add("flu");
 		}
 
 		//otherwise brute force
 		if(possibleWords.size()==0){
 			List<char[]> possibleChars=new ArrayList<char[]>();
 			for(BlockType type:blockTypes){
-				switch(type){
-				case UP:
-					possibleChars.add(ups);
-					break;
-				case DOWN:
-					possibleChars.add(downs);
-					break;
-				case SMALL:
-					possibleChars.add(smalls);
-					break;
-				case SPACE:
-					possibleChars.add(spaces);
-					break;
-				}
+				possibleChars.add(type.values);
+//				switch(type){
+//				case UP:
+//					possibleChars.add(ups);
+//					break;
+//				case DOWN:
+//					possibleChars.add(downs);
+//					break;
+//				case SMALL:
+//					possibleChars.add(smalls);
+//					break;
+//				case SPACE:
+//					possibleChars.add(spaces);
+//					break;
+//				}
 			}
-			iteration=0;
-			addPossibleLetters(possibleWords,possibleChars);
+			
+			CharIncrementer incrementer=new CharIncrementer(possibleChars);
+			boolean canIncrement=true;
+			int i=0;
+
+			String possibleWord;
+			while(canIncrement){
+				possibleWord=incrementer.getCurrentString();
+				if(!dictionary.misspelled(possibleWord)){
+					possibleWords.add(possibleWord);
+				}
+//				System.err.println("i="+i+" "+incrementer+" "+incrementer.getCurrentString());				
+				i++;
+				canIncrement=incrementer.increment();
+			}
+//			iteration=0;
+//			addPossibleLetters(possibleWords,possibleChars);
 //			filterMisSpelledWords(possibleWords);
 		}
 
-		System.err.println("possibleWords ["+possibleWords.size()+"]="+possibleWords);
+//		System.err.println("possibleWords ["+possibleWords.size()+"]="+possibleWords);
 
 		return possibleWords;
 	}
-private static long iteration;
+	
+	
+	
+private static long iteration=0;
 //	private static void filterMisSpelledWords(List<String> possibleWords) {
 //		for(int i=possibleWords.size()-1;i>=0;i--){
 //			if(dictionary.misspelled(possibleWords.get(i))){
