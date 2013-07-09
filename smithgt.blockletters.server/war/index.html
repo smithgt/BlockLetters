@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Blocky Letters</title>
+	<script type="text/javascript" src="d3.v3/d3.v3.js"></script>
+	<link rel="stylesheet" type="text/css" href="blockyletters.css">
+	<script type="text/javascript">
+	var serverURL="http://localhost:8888/blockletters";//dev
+	if(document.URL.indexOf("localhost")==-1){
+		serverURL="http://smithgt-blockletters.appspot.com/blockletters";
+	}
+	console.log("serverURL="+serverURL);
+
+	var rectWidth=20;
+	var rectCorners=5;
+
+	var ascenderRect={
+		name: "ascender",
+		cssClass: "block",
+		possibleLetters: [],
+		x: 0,
+		y: 12,
+		width: rectWidth,
+		height: 30,
+		rx: rectCorners,
+		ry: rectCorners
+	};
+	var descenderRect={
+		name: "descender",
+		cssClass: "block",
+		possibleLetters: [],
+		x: 0,
+		y: 22,
+		width: rectWidth,
+		height: 30,
+		rx: rectCorners,
+		ry: rectCorners
+	};
+	var smallRect={
+		name: "small",
+		cssClass: "block",
+		possibleLetters: [],
+		x: 0,
+		y: 22,
+		width: rectWidth,
+		height: 20,
+		rx: rectCorners,
+		ry: rectCorners
+	};
+	var spaceRect={
+		name: "space",
+		cssClass: "spaceBlock",
+		possibleLetters: [" "],
+		x: 0,
+		y: 22,
+		width: rectWidth,
+		height: 20,
+		rx: rectCorners,
+		ry: rectCorners
+	};
+
+	function getRectForChar(c){
+		var rect=null;
+		if(c=="b"){
+			rect=ascenderRect;
+		}else if(c=="a"){
+			rect=smallRect;
+		}else if(c=="g"){
+			rect=descenderRect;
+		}else if(c==" "){
+			rect=spaceRect;
+		}
+		return rect;
+	}
+
+	function parsePhrase(sInput, intro){
+		d3.json(serverURL+"?encodedWord="+input, function(error, json) {
+			if (error) return console.warn(error);
+			var encodedWordArray = json;
+			console.log(encodedWordArray);
+
+			var blockDataset=[];
+			var tempRect;
+
+			for(wordIndex=0;wordIndex<encodedWordArray.length;wordIndex++){
+				var encodedWord=encodedWordArray[wordIndex];
+				
+				for(i=0;i<encodedWord.encodedString.length;i++){
+					tempRect=getRectForChar(encodedWord.encodedString[i]);
+
+					if(tempRect!=null){
+						tempRect=JSON.parse(JSON.stringify(tempRect));
+						for(j=0;j<encodedWord.actualWords.length;j++){
+							tempRect.possibleLetters.push(encodedWord.actualWords[j][i]);	
+						}
+
+						console.log(tempRect);
+
+						blockDataset.push(tempRect);
+					}
+				}
+
+			}
+			console.log(blockDataset);
+			
+
+			//define all blocks
+			var rect=svg.selectAll("rect")
+			.data(blockDataset)
+			.enter()
+			.append("rect")
+			.attr("class",function(d){return d.cssClass;})
+			.attr("x", 0)
+			.attr("y", function(d){return d.y;})
+			.attr("width", function(d){return d.width;})
+			.attr("height", function(d) {return d.height;})
+			.attr("rx",function(d) {return d.rx;})
+			.attr("ry",function(d) {return d.ry;});
+
+			var text=svg.selectAll("text")
+			.data(blockDataset)
+			.enter()
+			.append("text")
+			.attr("text-anchor", "bottom")
+			.attr("x", function(d,i) {return 3+i*(rectWidth+4);})
+			.attr("y",39)
+			.attr("class","blockText");
+
+			//move blocks from left to right
+			rect.transition()
+			.duration(2000)
+			.attr("x", function(d,i) {return 2+i*(rectWidth+4);});
+
+			var wordCount=0;
+			var animationLoopCounter=0;
+
+			text.transition()
+			.duration(80)
+			.delay(2000)
+			.text(function(d) { return d.possibleLetters[wordCount]; })
+			.each(function(d,i){
+				var text = d3.select(this);
+				(function repeat() {
+					text = text
+					.transition()
+					.text(function(d) { return d.possibleLetters[wordCount]; })
+					.each("start", repeat);
+
+					if(intro && d.possibleLetters[wordCount]==d.possibleLetters[0]){
+						text.attr("class","blockText blockTextHighlight");
+					}else{
+						text.attr("class","blockText");
+					}
+/*
+					if(i==sInput.length-1){
+						animationLoopCounter++;
+						wordCount++;
+					}
+
+					if(wordCount==data.actualWords.length){
+						wordCount=0;
+					}
+					if(intro&&animationLoopCounter>0&&animationLoopCounter%(data.actualWords.length*3)==0){
+						if(data.actualWords.length>1)data.actualWords.pop();
+					}
+					*/
+
+				})();
+
+			});
+
+
+//			text.transition()
+//			.duration(2000)
+//			.delay(2000)
+//			.text(function(d) { return d.possibleLetters[wordCount]; })
+
+});
+}
+
+</script>
+</head>
+<body>
+	<svg id="introSVG" width="500" height="55"></svg>
+
+	<div id="encodedInputDiv">
+		Enter an encoded string:
+		<input id="encodedInputBox" type="text" onchange="validateEncodedInput(event);" onkeypress="this.onchange(event);" onpaste="this.onchange(event);" oninput="this.onchange(event);">
+		<button type="button" onClick="getPossibleWords();">Get possible words</button>
+	</div>
+
+	<script type="text/javascript">
+		//populate the intro svg
+		showIntro();
+
+
+		//var input="bbaabg babbaaa";
+		//var input="bbaabg";
+		//parsePhrase(input, true);
+
+
+		function getPossibleWords(){
+			var inputBox=d3.select("#encodedInputBox");
+			var encodedInputString=inputBox.property("value");
+
+			d3.json(serverURL+"?encodedWord="+encodedInputString, function(error, json) {
+				if (error) return console.warn(error);
+				d3.select("#encodedOutputDiv").remove();
+				d3.select("#possibleWordsDiv").remove();
+				var encodedWordArray = json;
+
+				//console.log(encodedWordArray);
+				if(encodedWordArray.length==1&&encodedWordArray[0]==null){
+					//showNoEncodedResultsFound(encodedInputString);
+					alert("No words found for encoded string '"+encodedInputString+"'.");
+					return;
+				}
+
+				var blockDataset=[];
+				var tempRect;
+				var possibleWords=[];
+
+				for(wordIndex=0;wordIndex<encodedWordArray.length;wordIndex++){
+					var encodedWord=encodedWordArray[wordIndex];
+
+					if(encodedWord.encodedString!=" "){
+						possibleWords.push(encodedWord.actualWords);
+					}
+
+					for(i=0;i<encodedWord.encodedString.length;i++){
+						tempRect=getRectForChar(encodedWord.encodedString[i]);
+
+						if(tempRect!=null){
+							tempRect=JSON.parse(JSON.stringify(tempRect));
+							for(j=0;j<encodedWord.actualWords.length;j++){
+								tempRect.possibleLetters.push(encodedWord.actualWords[j][i]);	
+							}
+
+							//console.log(tempRect);
+
+							blockDataset.push(tempRect);
+						}
+					}
+			}
+
+
+			var svg=d3.select("#encodedInputDiv")
+			.append("div")
+			.attr("id","encodedOutputDiv")
+			.append("svg")
+			.attr("width", 2+(rectWidth+7)*encodedInputString.length)
+			.attr("height", 55);
+
+			var rect=createBlocks(svg,blockDataset);
+			applyLeftToRightBlockTransition(rect);
+
+			var div=d3.select("#encodedInputDiv")
+			.append("div")
+			.attr("id","possibleWordsDiv");
+
+			div.selectAll("p")
+			.data(encodedWordArray)
+			.enter()
+			.append("p")
+			.text(function(d){return d.encodedString+": "+d.actualWords;});
+
+/*
+			var possiblePhrases=[];
+			createPossiblePhrases(possiblePhrases, possibleWords);
+			
+
+			var div=d3.select("#encodedInputDiv")
+			.append("div")
+			.attr("id","possibleWordsDiv");
+	
+
+			div.selectAll("p")
+			.data(possiblePhrases)
+			.enter()
+			.append("p")
+			.text(function(d){return d});
+			
+			
+			for(i=0;i<possiblePhrases.length;i++){
+
+			}
+*/			
+
+				/*
+				var text=createText(svg,blockDataset);
+
+				//apply initial text
+				text.transition()
+				.delay(2000)
+				.text(function(d) { return d.possibleLetters[0]; });
+				*/
+			});
+
+}
+
+function createPossiblePhrases(possiblePhrases, possibleWords) {
+	if(possibleWords.length==0)return;
+	var words=possibleWords[0];
+	var combos=[];
+
+	for(i=0;i<words.length;i++){
+		var word=words[i];
+		if(possiblePhrases.length>0){
+			for(j=0;j<possiblePhrases.length;j++){
+				var phrase=possiblePhrases[j];
+				combos.push(phrase+word+" ");
+			}
+		}else{
+			combos.push(word+" ");
+		}
+	}
+	possiblePhrases.length=0;
+	possiblePhrases.push.apply(possiblePhrases,combos);
+
+	possibleWords.shift();
+	createPossiblePhrases(possiblePhrases,possibleWords);
+}
+
+function validateEncodedInput(event){
+	var inputBox=d3.select("#encodedInputBox");
+	var encodedInputString=inputBox.property("value");
+	var validString="";
+
+	for(i=0;i<encodedInputString.length;i++){
+		if(encodedInputString[i]=="b"||encodedInputString[i]=="a"||encodedInputString[i]=="g"||encodedInputString[i]==" "){
+			validString+=encodedInputString[i];
+		}
+	}
+	inputBox.property("value",validString);
+
+	if (event.which == 13 || event.keyCode == 13) {
+		getPossibleWords();
+	}
+}
+
+
+function showIntro(){
+			//intro text
+			var introText=			"blocky letters";
+			var encodedIntroText=	"bbaabg babbaaa";
+
+			//intro width and height
+			var w = 500;
+			var h = 100;
+
+			//create SVG element
+			var introSVG = d3.select("#introSVG");
+			console.log(introSVG);
+			//.append("svg")
+			//.attr("width", w)
+			//.attr("height", h);
+
+			var dataset=[];
+			for(i=0;i<encodedIntroText.length;i++){
+				var tempRect=getRectForChar(encodedIntroText[i]);
+				tempRect=JSON.parse(JSON.stringify(tempRect));
+				tempRect.possibleLetters.push(introText[i]);
+				dataset.push(tempRect);
+			}
+			console.log(dataset);
+
+			var rect=createBlocks(introSVG,dataset);
+			applyLeftToRightBlockTransition(rect);
+			var text=createText(introSVG,dataset);
+			
+			//apply initial text
+			text.transition()
+			.delay(2000)
+			.text(function(d) { return d.possibleLetters[0]; });
+			
+		}
+		function createText(svg, dataset){
+			var text=svg.selectAll("text")
+			.data(dataset)
+			.enter()
+			.append("text")
+			.attr("text-anchor", "bottom")
+			.attr("x", function(d,i) {return 3+i*(rectWidth+4);})
+			.attr("y",39)
+			.attr("class","blockText");
+			return text;
+		}
+
+		function createBlocks(svg, dataset){
+			//define all blocks
+			var rect=svg.selectAll("rect")
+			.data(dataset)
+			.enter()
+			.append("rect")
+			.attr("class",function(d){return d.cssClass;})
+			.attr("x", 0)
+			.attr("y", function(d){return d.y;})
+			.attr("width", function(d){return d.width;})
+			.attr("height", function(d) {return d.height;})
+			.attr("rx",function(d) {return d.rx;})
+			.attr("ry",function(d) {return d.ry;});
+			return rect;
+		}
+		function applyLeftToRightBlockTransition(rect){
+			//move blocks from left to right
+			rect.transition()
+			.duration(2000)
+			.attr("x", function(d,i) {return 2+i*(rectWidth+4);});
+		}
+
+		</script>
+
+		
+
+	</body>
+	</html>

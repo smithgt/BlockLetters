@@ -1,0 +1,20 @@
+svg .block{
+	fill:white;
+	stroke:black;
+	stroke-width:2px;
+}
+svg .spaceBlock{
+	fill:rgba(0,0,0,0);
+	stroke:rgba(0,0,0,0);
+	stroke-width:2px;
+}
+svg .blockText{
+	font-family: "Courier New";
+	font-weight: bold;
+	font-size: 1.9em;
+	fill: LightSteelBlue; 
+}
+svg .blockText.blockTextHighlight{
+	.blockText;
+	fill: Red;
+}
